@@ -570,8 +570,27 @@ class ClusterController(ObjectController):
         return addr
 
     def _make_exec_requests(self, pile, exec_requests):
+    	my_debug("inside _make_exec_requests", exec_requests)
+	my_debug("pile", pile.__dict__)
         for exec_request in exec_requests:
             node = exec_request.node
+	    '''
+		node object here contains all the required information required for a to be created zerovm node.
+		this is some of the members of node:
+		'args': 'hello.pybangladesh',
+		'channels': [
+		            <zerocloud.common.ZvmChannelobjectat0x309f190>,
+			    <zerocloud.common.ZvmChannelobjectat0x309f1d0>,
+			    <zerocloud.common.ZvmChannelobjectat0x309f210>
+			],
+		'access': 'GET',
+		'exe': <zerocloud.common.ImagePathinstanceat0x32d04d0>,
+		'name': 'hello',
+		...
+		and so on.
+
+	    '''
+	    my_debug("node", node.__dict__)
             account, container, obj = \
                 split_path(node.path_info, 1, 3, True)
             if obj:
@@ -765,6 +784,7 @@ class ClusterController(ObjectController):
     @delay_denial
     @cors_validation
     def POST(self, req, exe_resp=None, cluster_config=''):
+    	my_debug("@POST", req.__dict__)
         image_resp = None
         user_image = False
         chunk_size = self.middleware.network_chunk_size
@@ -839,6 +859,11 @@ class ClusterController(ObjectController):
                         return HTTPRequestEntityTooLarge(request=req)
                     etag.update(chunk)
                     cluster_config += chunk
+		''' cluster_config contains the .json file content.
+		ex. [{"file_list": [{"device": "python2.7"}, {"device": "stdout"}, {"device": "image", "path": "swift://AUTH_8b2be51be0c1485480dcb4f6e725cf50/container1/hello.zapp"}], "name": "hello", "exec": {"path": "file://python2.7:python", "args": "hello.py bangladesh"}}]
+
+		'''
+		my_debug("cluster_config", cluster_config)
                 if 'content-length' in req.headers and \
                    int(req.headers['content-length']) != req.bytes_transferred:
                     return HTTPClientDisconnect(request=req,
@@ -925,6 +950,8 @@ class ClusterController(ObjectController):
                                       'Content-Length': stream_length})
             image_resp.nodes = []
 
+
+	my_debug("self app",  self.__dict__)
         req.path_info = '/' + self.account_name
         try:
             if self.middleware.ignore_replication:
@@ -961,6 +988,7 @@ class ClusterController(ObjectController):
             if not ns_server.port:
                 return HTTPServiceUnavailable(body='Cannot bind name service')
         exec_requests = []
+	my_debug("self.parser", self.parser.__dict__)
         for node in self.parser.node_list:
             nexe_headers = {
                 'x-nexe-system': node.name,
@@ -1033,6 +1061,8 @@ class ClusterController(ObjectController):
             exec_request.node = node
             exec_request.resp_headers = nexe_headers
             sock = self.get_daemon_socket(node)
+	    my_debug("local variables are", locals())
+	    my_debug("exec requests are", exec_request.__dict__)
             if sock:
                 exec_request.headers['x-zerovm-daemon'] = str(sock)
             exec_requests.append(exec_request)
@@ -1051,6 +1081,7 @@ class ClusterController(ObjectController):
                 n['node'].size += \
                     TarStream.get_archive_size(data_src.content_length)
         pile = GreenPileEx(self.parser.total_count)
+	my_debug("pile @1064", pile.__dict__)
         conns = self._make_exec_requests(pile, exec_requests)
         if len(conns) < self.parser.total_count:
             self.app.logger.exception(
