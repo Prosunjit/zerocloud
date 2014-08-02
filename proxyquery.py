@@ -57,6 +57,31 @@ except ImportError:
     import json
 
 
+
+'''
+	cluster configuration comes from the .json file.
+	code review comment: 
+	__call__ --> ... 
+	
+	--> handler = getattr(controller, req.method): call req.method=POST
+
+	--> hander(req) : This calls the POST method of ClusterController object.
+
+	--> POST():
+		if content_type == json, read .json file, which is used as cluster configuration file.
+		.json file is then parsed and self.parser object contains #zvm object/nodes in the node_list variable of self.parser object.
+
+		make_exec_request()
+		_process_response() : get response from a given connection node.
+	
+	
+	--> _process_response()
+		process_server_response(): 
+
+	--> process_server_response() 
+		ObjectController(...).PUT()
+'''
+
 # Monkey patching Request to support content_type property properly
 def _req_content_type_property():
     """
@@ -457,7 +482,7 @@ class ProxyQueryMiddleware(object):
 
     @wsgify
     def __call__(self, req):
-    	my_debug("@460", req.__dict__)
+    	my_debug("#__call__", req.__dict__)
 	my_debug("req.path", req.path)
 
         try:
@@ -971,6 +996,16 @@ class ClusterController(ObjectController):
         # for n in self.parser.node_list:
         #     print n.dumps(indent=2)
 
+	my_debug("#self.parser.parse",self.parser.__dict__)
+
+	''' 
+	The parser object contains to be created zerovm nodes in 'node_list' variable.
+	
+	{'default_content_type': 'application/octet-stream', 'list_container': <bound method ProxyQueryMiddleware.list_container of <zerocloud.proxyquery.ProxyQueryMiddleware object at 0x2a8b050>>, 'list_account': <bound method ProxyQueryMiddleware.list_account of <zerocloud.proxyquery.ProxyQueryMiddleware object at 0x2a8b050>>, 'total_count': 1, 'node_list': [<zerocloud.common.ZvmNode object at 0x2b431d0>], 'parser_config': {'limits': {'wbytes': 1073741824, 'rbytes': 1073741824, 'reads': 1073741824, 'writes': 1073741824}}, 'node_id': 2, 'sysimage_devices': {'python2.7': None, '/usr/share/zerovm/python.tar': None}, 'network_type': 'tcp', 'nodes': {'hello': <zerocloud.common.ZvmNode object at 0x2b431d0>}	
+	}
+
+	'''
+
         data_sources = []
         addr = self._get_own_address()
         if not addr:
@@ -988,7 +1023,8 @@ class ClusterController(ObjectController):
             if not ns_server.port:
                 return HTTPServiceUnavailable(body='Cannot bind name service')
         exec_requests = []
-	my_debug("self.parser", self.parser.__dict__)
+	my_debug("#self.parser", self.parser.__dict__)
+	my_debug("self.parser.node_list", self.parser.node_list)
         for node in self.parser.node_list:
             nexe_headers = {
                 'x-nexe-system': node.name,
@@ -1034,11 +1070,13 @@ class ClusterController(ObjectController):
             node.copy_cgi_env(exec_request)
             resp = node.create_sysmap_resp()
             node.add_data_source(data_sources, resp, 'sysmap')
+	    my_debug("#replication nodes", node.replicas) # node.replicas=[]
             for repl_node in node.replicas:
                 repl_node.copy_cgi_env(exec_request)
                 resp = repl_node.create_sysmap_resp()
                 repl_node.add_data_source(data_sources, resp, 'sysmap')
             channels = self._get_remote_objects(node)
+	    my_debug("#channels with node", channels) # channels = []
             for ch in channels:
                 error = self._create_request_for_remote_object(data_sources,
                                                                ch,
@@ -1061,8 +1099,8 @@ class ClusterController(ObjectController):
             exec_request.node = node
             exec_request.resp_headers = nexe_headers
             sock = self.get_daemon_socket(node)
-	    my_debug("local variables are", locals())
-	    my_debug("exec requests are", exec_request.__dict__)
+	    my_debug("#local variables are", locals())
+	    my_debug("#exec requests are", exec_request.__dict__)
             if sock:
                 exec_request.headers['x-zerovm-daemon'] = str(sock)
             exec_requests.append(exec_request)
@@ -1070,8 +1108,10 @@ class ClusterController(ObjectController):
         if user_image:
             data_sources.append(image_resp)
         tstream = TarStream()
+	my_debug("#data sources", data_sources) # start from here.
         for data_src in data_sources:
-            for n in data_src.nodes:
+	    my_debug("#data source in array", data_src.__dict__)
+            for n in data_src.nodes:  # data_src.nodes contains list of zerocloud.common.ZvmNode object
                 if not getattr(n['node'], 'size', None):
                     n['node'].size = 0
                 n['node'].size += len(tstream.create_tarinfo(
@@ -1081,7 +1121,7 @@ class ClusterController(ObjectController):
                 n['node'].size += \
                     TarStream.get_archive_size(data_src.content_length)
         pile = GreenPileEx(self.parser.total_count)
-	my_debug("pile @1064", pile.__dict__)
+	my_debug("pile @1064", pile.__dict__)i
         conns = self._make_exec_requests(pile, exec_requests)
         if len(conns) < self.parser.total_count:
             self.app.logger.exception(
@@ -1299,6 +1339,8 @@ class ClusterController(ObjectController):
                                      chan.path.account,
                                      chan.path.container,
                                      chan.path.obj).PUT(dest_req)
+
+		my_debug("channel.path dict", channel.path.__dict__)
                 if dest_resp.status_int >= 300:
                     conn.error = 'Status %s when putting %s' \
                                  % (dest_resp.status, chan.path.path)
