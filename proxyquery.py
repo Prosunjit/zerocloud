@@ -74,7 +74,33 @@ except ImportError:
 		make_exec_request()
 		_process_response() : get response from a given connection node.
 	
-	
+
+	--> make_exec_request(exec_requests)
+		node = exec_requests[0]
+		node.exe: contains executable for zerovm instance.
+			ex: {'url': 'file://python2.7:python', 'path': 'python', 'image': 'python2.7'}
+		node.channels[0].__dict__:
+			{'content_type': 'application/octet-stream', 'access': 16, ...  'mountpoint': '/', 'device': 'image', 'path': <zerocloud.common.SwiftPath instance at 0x2d14998>}
+		node.channels[0].path.__dict__:
+			{'url': 'swift://AUTH_0548686192274465bcdc4acec67f4396/container1/hello.zapp', 'path': '/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.zapp', 'account': 'AUTH_0548686192274465bcdc4acec67f4396', 'container': 'container1', 'obj': 'hello.zapp'}
+		
+	--> _connect_exec_node(..., object_nodes, request_headers):
+		each object node has looks like :
+			{'replication_port': 6013, 'zone': 1, 'weight': 1.0, 'ip': '127.0.0.1', 'region': 1, 'port': 6013, 'replication_ip': '127.0.0.1', 'meta': '', 'device': 'sdb1', 'id': 0}
+		From node, it is clear in which object server, the object request would go, in which port and so on.
+
+		conn = http_connect(node['ip'], node['port'],
+					node['device'], part,
+					request.method,
+					request.path_info,
+					request_headers)
+		http_connect(...) call is finally used to call the object server code.
+		
+		This method return response from object server which is futher processed in _process_response() method.
+
+
+
+
 	--> _process_response()
 		process_server_response(): 
 
@@ -616,6 +642,8 @@ class ClusterController(ObjectController):
 
 	    '''
 	    my_debug("node", node.__dict__)
+
+	    my_debug("node.exe.__dict__", node.exe.__dict__)
             account, container, obj = \
                 split_path(node.path_info, 1, 3, True)
             if obj:
@@ -1104,11 +1132,13 @@ class ClusterController(ObjectController):
             if sock:
                 exec_request.headers['x-zerovm-daemon'] = str(sock)
             exec_requests.append(exec_request)
+	
+	my_debug("#data source",data_sources)
 
         if user_image:
             data_sources.append(image_resp)
         tstream = TarStream()
-	my_debug("#data sources", data_sources) # start from here.
+	my_debug("#data sources dict", data_sources[0].__dict__) # start from here.
         for data_src in data_sources:
 	    my_debug("#data source in array", data_src.__dict__)
             for n in data_src.nodes:  # data_src.nodes contains list of zerocloud.common.ZvmNode object
@@ -1122,6 +1152,10 @@ class ClusterController(ObjectController):
                     TarStream.get_archive_size(data_src.content_length)
         pile = GreenPileEx(self.parser.total_count)
 	my_debug("pile @1064", pile.__dict__)
+	my_debug("exec_requests", exec_requests[0].__dict__)
+	'''
+		zerovm execution request is made & being sent from here.
+	'''
         conns = self._make_exec_requests(pile, exec_requests)
         if len(conns) < self.parser.total_count:
             self.app.logger.exception(
