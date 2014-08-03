@@ -1121,7 +1121,7 @@ class ClusterController(ObjectController):
                 n['node'].size += \
                     TarStream.get_archive_size(data_src.content_length)
         pile = GreenPileEx(self.parser.total_count)
-	my_debug("pile @1064", pile.__dict__)i
+	my_debug("pile @1064", pile.__dict__)
         conns = self._make_exec_requests(pile, exec_requests)
         if len(conns) < self.parser.total_count:
             self.app.logger.exception(
