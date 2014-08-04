@@ -74,33 +74,7 @@ except ImportError:
 		make_exec_request()
 		_process_response() : get response from a given connection node.
 	
-
-	--> make_exec_request(exec_requests)
-		node = exec_requests[0]
-		node.exe: contains executable for zerovm instance.
-			ex: {'url': 'file://python2.7:python', 'path': 'python', 'image': 'python2.7'}
-		node.channels[0].__dict__:
-			{'content_type': 'application/octet-stream', 'access': 16, ...  'mountpoint': '/', 'device': 'image', 'path': <zerocloud.common.SwiftPath instance at 0x2d14998>}
-		node.channels[0].path.__dict__:
-			{'url': 'swift://AUTH_0548686192274465bcdc4acec67f4396/container1/hello.zapp', 'path': '/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.zapp', 'account': 'AUTH_0548686192274465bcdc4acec67f4396', 'container': 'container1', 'obj': 'hello.zapp'}
-		
-	--> _connect_exec_node(..., object_nodes, request_headers):
-		each object node has looks like :
-			{'replication_port': 6013, 'zone': 1, 'weight': 1.0, 'ip': '127.0.0.1', 'region': 1, 'port': 6013, 'replication_ip': '127.0.0.1', 'meta': '', 'device': 'sdb1', 'id': 0}
-		From node, it is clear in which object server, the object request would go, in which port and so on.
-
-		conn = http_connect(node['ip'], node['port'],
-					node['device'], part,
-					request.method,
-					request.path_info,
-					request_headers)
-		http_connect(...) call is finally used to call the object server code.
-		
-		This method return response from object server which is futher processed in _process_response() method.
-
-
-
-
+	
 	--> _process_response()
 		process_server_response(): 
 
@@ -644,6 +618,10 @@ class ClusterController(ObjectController):
 	    my_debug("node", node.__dict__)
 
 	    my_debug("node.exe.__dict__", node.exe.__dict__)
+	    my_debug("node.channel[0].__dict__",node.channels[0].__dict__)
+	    my_debug("node.channel[0].path.__dict__",node.channels[0].path.__dict__)
+
+	    #node.path_info contains '/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.zapp'
             account, container, obj = \
                 split_path(node.path_info, 1, 3, True)
             if obj:
@@ -663,6 +641,10 @@ class ClusterController(ObjectController):
                     self.iter_nodes_local_first(
                         self.app.object_ring,
                         partition))
+
+	    '''
+		node.path_info contains '/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.zapp'
+	    '''
             exec_request.path_info = node.path_info
             exec_request.headers['x-zerovm-access'] = node.access
             if node.replicate > 1:
@@ -1421,6 +1403,10 @@ class ClusterController(ObjectController):
         self.app.logger.thread_locals = logger_thread_locals
         conn = None
         for node in obj_nodes:
+	    my_debug("node.__dict__", node)
+	    '''
+		{'replication_port': 6013, 'zone': 1, 'weight': 1.0, 'ip': '127.0.0.1', 'region': 1, 'port': 6013, 'replication_ip': '127.0.0.1', 'meta': '', 'device': 'sdb1', 'id': 0}
+	    '''
             try:
                 with ConnectionTimeout(self.middleware.conn_timeout):
                     request.headers['Connection'] = 'close'

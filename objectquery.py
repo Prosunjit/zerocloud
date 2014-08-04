@@ -62,6 +62,12 @@ RETCODE_MAP = [
 ]
 
 
+
+def my_debug(str, arg):
+	print "------------------{}----------------------".format(str)
+	print arg
+	print "------------------{}----------------------".format(str)
+
 class LocalObject(object):
 
     def __init__(self, account, container, obj,
@@ -608,12 +614,20 @@ class ObjectQueryMiddleware(object):
         }
 
         try:
+	    # find account, container, object name
             (device, partition, account, container, obj) = \
                 split_path(unquote(req.path), 3, 5, True)
         except ValueError, err:
             return HTTPBadRequest(body=str(err), request=req,
                                   content_type='text/plain')
         local_object = LocalObject(account, container, obj)
+	'''
+	#name of the local_object
+	ex:
+		{'account': 'AUTH_0548686192274465bcdc4acec67f4396', 'obj': 'hello.zapp', 'disk_file': None, 'has_local_file': True, 'swift_path': <zerocloud.common.SwiftPath instance at 0x23b23f8>, 'path': None, 'container': 'container1', 'channel': None}
+
+	'''
+	my_debug("#local object", local_object.__dict__)
         rbytes = self.parser_config['limits']['rbytes']
         if 'content-length' in req.headers \
                 and int(req.headers['content-length']) > rbytes:
@@ -640,6 +654,7 @@ class ObjectQueryMiddleware(object):
                                        account,
                                        container,
                                        obj)
+		my_debug("#local_object.disk_file", local_object.disk_file.__dict__)	
             except DiskFileDeviceUnavailable:
                 return HTTPInsufficientStorage(drive=device,
                                                request=req)
@@ -695,13 +710,18 @@ class ObjectQueryMiddleware(object):
         )
         start = time.time()
         channels = {}
+	#what is the purpose of zerovm_tmp here?
         with tmpdir.mkdtemp() as zerovm_tmp:
+	    my_debug("#req.body_file",req.body_file.wfile)
+	    #what is the read_iterator? why it use them ?
             read_iter = iter(lambda:
                              req.body_file.read(self.network_chunk_size),
                              '')
             upload_expiration = time.time() + self.max_upload_time
             untar_stream = UntarStream(read_iter)
             perf = "%.3f" % (time.time() - start)
+
+	    my_debug("read_iter", read_iter)
             for chunk in read_iter:
                 perf = "%s %.3f" % (perf, time.time() - start)
                 if req.body_file.position > rbytes:
@@ -715,6 +735,7 @@ class ObjectQueryMiddleware(object):
                                               headers=nexe_headers)
                 untar_stream.update_buffer(chunk)
                 info = untar_stream.get_next_tarinfo()
+		my_debug("#untar_stream info",info.__dict__)
                 while info:
                     if info.offset_data:
                         fname = info.name
@@ -724,7 +745,15 @@ class ObjectQueryMiddleware(object):
                             file_iter = gunzip_iter(
                                 untar_stream.untar_file_iter(),
                                 self.network_chunk_size)
+
                         channels[fname] = os.path.join(zerovm_tmp, fname)
+				
+			my_debug("fname of channels[fname]", channels[fname])
+
+			'''
+				channels[fame] : /opt/stack/data/1/sdb1/tmp/tmpqVKBkp/sysmap
+			'''
+
                         fp = open(channels[fname], 'ab')
                         untar_stream.to_write = info.size
                         untar_stream.offset_data = info.offset_data
@@ -740,6 +769,8 @@ class ObjectQueryMiddleware(object):
                                 body='Failed to inflate gzipped image',
                                 headers=nexe_headers)
                         fp.close()
+
+			my_debug("fp",fp)
                     info = untar_stream.get_next_tarinfo()
             if 'content-length' in req.headers \
                     and int(req.content_length) != req.body_file.position:
@@ -757,6 +788,7 @@ class ObjectQueryMiddleware(object):
                 fp = open(config_file, 'rb')
                 try:
                     config = json.load(fp)
+		    my_debug("config", config)
                 except Exception:
                     fp.close()
                     return HTTPBadRequest(request=req,
@@ -1169,6 +1201,24 @@ class ObjectQueryMiddleware(object):
 
     def __call__(self, env, start_response):
         """WSGI Application entry point for the Swift Object Server."""
+	'''
+		How does the PATH_INFO has been populated from Proxy_Query?
+		How does self.app is function / object get called ?
+	'''
+
+	'''	
+		Two requests (First GET for the .json file and second POST for the .zapp file
+
+	'''
+
+	my_debug("__call__, env.dict", env)
+
+	'''
+		HTTP_REFERER': 'GET http://192.168.2.7:8080/v1/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.json',
+		'PATH_INFO': '/sdb1/286/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.json',
+
+	'''
+
         start_time = time.time()
         req = Request(env)
         self.logger.txn_id = req.headers.get('x-trans-id', None)
