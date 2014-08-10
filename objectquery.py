@@ -61,11 +61,27 @@ RETCODE_MAP = [
     'Output too long'  # [4]
 ]
 
+def replace_single_quote_with_double(str):
+	import string
+	return string.replace(str,'\'', '\"')
 
+def is_json(myjson):
+  #return False
+  try:
+      myjson = replace_single_quote_with_double(myjson)
+      json_object = json.loads(myjson)
+  except ValueError, e:
+      return False
+  return True
 
 def my_debug(str, arg):
 	print "------------------{}----------------------".format(str)
-	print arg
+
+	if is_json(arg):
+		arg = replace_single_quote_with_double(arg)
+		print json.dumps(arg, sort_keys=True, indent=4, separators=(',', ': '))
+	else:
+		print arg
 	print "------------------{}----------------------".format(str)
 
 class LocalObject(object):
@@ -476,6 +492,12 @@ class ObjectQueryMiddleware(object):
                 return get_final_status(stdout_data, stderr_data, 3)
 
     def _extract_boot_file(self, channels, boot_file, image, zerovm_tmp):
+    	my_debug("#boot_file", boot_file)
+	my_debug("#locals() in _extract_boof_file()", locals())
+	''' ------locals() has following values -------
+	          {'boot_file': 'python', 'channels': {}, 'image': '/usr/share/zerovm/python.tar', 'zerovm_tmp': '/opt/stack/data/1/sdb1/tmp/tmpXcWkV4', 'self': <zerocloud.objectquery.ObjectQueryMiddleware object at 0x2c91590>}
+
+	'''
         tar = tarfile.open(name=image)
         nexe = None
         try:
@@ -645,7 +667,8 @@ class ObjectQueryMiddleware(object):
                                   body='Invalid Content-Type',
                                   content_type='text/plain',
                                   headers=nexe_headers)
-        access_type = req.headers.get('x-zerovm-access', '')
+        my_debug("#req.headers",req.headers)
+	access_type = req.headers.get('x-zerovm-access', '') # X-Zerovm-Access': 'GET'
         if obj:
             try:
                 local_object.disk_file = \
@@ -708,11 +731,14 @@ class ObjectQueryMiddleware(object):
             device,
             os_interface=self.os_interface
         )
+
+	my_debug("#tmpdir",tmpdir.__dict__)
         start = time.time()
         channels = {}
 	#what is the purpose of zerovm_tmp here?
         with tmpdir.mkdtemp() as zerovm_tmp:
-	    my_debug("#req.body_file",req.body_file.wfile)
+	    my_debug("#req.body_file",req.body_file.__dict__)
+	    my_debug("#req.body_file.wfile",dir(req.body_file.wfile))
 	    #what is the read_iterator? why it use them ?
             read_iter = iter(lambda:
                              req.body_file.read(self.network_chunk_size),
@@ -760,6 +786,7 @@ class ObjectQueryMiddleware(object):
                         try:
                             for data in file_iter:
                                 fp.write(data)
+				my_debug('#data', data)
                                 perf = "%s %s:%.3f" % (perf,
                                                        info.name,
                                                        time.time() - start)
@@ -802,7 +829,9 @@ class ObjectQueryMiddleware(object):
             # print json.dumps(config, indent=2)
             zerovm_nexe = None
             exe_path = parse_location(config['exe'])
+	    my_debug("locals()", locals())
             if is_image_path(exe_path):
+		my_debug("#is_image_path(exe_path)", "TRUE")
                 if exe_path.image in channels:
                     self._extract_boot_file(channels,
                                             exe_path.path,
@@ -816,6 +845,10 @@ class ObjectQueryMiddleware(object):
                                                    sysimage_path,
                                                    zerovm_tmp):
                             zerovm_valid = True
+	    my_debug("#channels", channels)
+	    '''
+		{'boot': '/opt/stack/data/1/sdb1/tmp/tmp7XOHwZ/boot'}. 'boot' is essentially the python nexe extracted from /usr/share/zerovm/python.tar
+	    '''
             if 'boot' in channels:
                 zerovm_nexe = channels.pop('boot')
             elif not daemon_sock:
@@ -827,8 +860,10 @@ class ObjectQueryMiddleware(object):
                     and len(config.get('replicas', [])) < (replicate - 1):
                 is_master = False
             response_channels = []
+	    
             for ch in config['channels']:
                 chan_path = parse_location(ch['path'])
+		
                 if ch['device'] in channels:
                     ch['lpath'] = channels[ch['device']]
                 elif local_object.has_local_file and chan_path:
