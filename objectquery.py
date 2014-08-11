@@ -51,8 +51,14 @@ try:
 except ImportError:
     import json
 
+try:
+    from my_debug import my_debug, MyDebug
+except ImportError:
+    def my_debug( str, arg):
+       	print "------------------{}----------------------".format(str)
+	print arg
+ 	print "------------------{}----------------------".format(str)
 
-CONT_DATADIR = 'containers'
 # mapping between return code and its message
 RETCODE_MAP = [
     'OK',              # [0]
@@ -61,12 +67,6 @@ RETCODE_MAP = [
     'Killed',          # [3]
     'Output too long'  # [4]
 ]
-
-
-def my_debug(str, arg):
-	print "------------------{}----------------------".format(str)
-	print arg
-	print "------------------{}----------------------".format(str)
 
 class LocalObject(object):
 
@@ -601,7 +601,7 @@ class ObjectQueryMiddleware(object):
 
     def zerovm_query(self, req):
         """Handle zerovm execution requests for the Swift Object Server."""
-
+	my_debug("#req inside zerovm_query",req.__dict__)
         debug_dir = self._debug_init(req)
         daemon_sock = req.headers.get('x-zerovm-daemon', None)
         if daemon_sock:
@@ -619,10 +619,15 @@ class ObjectQueryMiddleware(object):
             'x-nexe-system': ''
         }
 
+	#MyDebug("#req in zerovm_query", req).inspect()
+
         try:
 	    # find account, container, object name
+	    # req.path ~= /sdb1/370/AUTH_291943978e17472294af4451377d7dd6/container1/hello.zapp
+	    my_debug("#req.path",req.path)
             (device, partition, account, container, obj) = \
                 split_path(unquote(req.path), 3, 5, True)
+	
         except ValueError, err:
             return HTTPBadRequest(body=str(err), request=req,
                                   content_type='text/plain')
@@ -1285,7 +1290,7 @@ class ObjectQueryMiddleware(object):
 
 	'''
 
-	my_debug("__call__, env.dict", env)
+	my_debug("#__call__, env.dict", env)
 
 	'''
 		HTTP_REFERER': 'GET http://192.168.2.7:8080/v1/AUTH_0548686192274465bcdc4acec67f4396/container1/hello.json',
