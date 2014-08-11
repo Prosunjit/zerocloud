@@ -51,6 +51,7 @@ try:
 except ImportError:
     import json
 
+
 CONT_DATADIR = 'containers'
 # mapping between return code and its message
 RETCODE_MAP = [
@@ -61,27 +62,10 @@ RETCODE_MAP = [
     'Output too long'  # [4]
 ]
 
-def replace_single_quote_with_double(str):
-	import string
-	return string.replace(str,'\'', '\"')
-
-def is_json(myjson):
-  #return False
-  try:
-      myjson = replace_single_quote_with_double(myjson)
-      json_object = json.loads(myjson)
-  except ValueError, e:
-      return False
-  return True
 
 def my_debug(str, arg):
 	print "------------------{}----------------------".format(str)
-
-	if is_json(arg):
-		arg = replace_single_quote_with_double(arg)
-		print json.dumps(arg, sort_keys=True, indent=4, separators=(',', ': '))
-	else:
-		print arg
+	print arg
 	print "------------------{}----------------------".format(str)
 
 class LocalObject(object):
@@ -860,7 +844,14 @@ class ObjectQueryMiddleware(object):
                     and len(config.get('replicas', [])) < (replicate - 1):
                 is_master = False
             response_channels = []
-	    
+	    my_debug("#config", config) 
+
+	    '''
+
+		'channels': [{'content_type': 'application/octet-stream', 'access': 16, 'meta': {}, 'mode': None, 'removable': 'no', 'path': 'swift://AUTH_0025cb5d94bd46dc8b792a6ad0c5226d/container1/hello.zapp', 'device': 'image', 'mountpoint': '/'}, {'content_type': 'text/html', 'access': 2, 'meta': {}, 'mode': None, 'removable': 'no', 'path': None, 'device': 'stdout', 'mountpoint': '/'}, {'content_type': 'text/html', 'access': 5, 'meta': {}, 'mode': None, 'removable': 'no', 'path': None, 'device': 'python2.7', 'mountpoint': '/'}]
+
+	    '''
+
             for ch in config['channels']:
                 chan_path = parse_location(ch['path'])
 		
@@ -928,9 +919,18 @@ class ObjectQueryMiddleware(object):
                             response_channels.insert(0, ch)
                 elif ch['access'] & ACCESS_NETWORK:
                     ch['lpath'] = chan_path.path
+	    
+	    my_debug("#config", config) 
+            '''
+		'channels': [{'lpath': '/opt/stack/data/1/sdb1/objects/6/89e/0349731b12176cbf2d4c14054acdd89e/1407706277.40014.data', 'content_type': 'application/octet-stream', 'access': 16, 'meta': {'X-Timestamp': '1407706277.40014', 'Content-Length': '20480', 'ETag': 'db2bbea3ff870f16bad02755558b2794', 'Content-Type': 'application/octet-stream', 'name': '/AUTH_0025cb5d94bd46dc8b792a6ad0c5226d/container1/hello.zapp'}, 'mode': None, 'removable': 'no', 'path': 'swift://AUTH_0025cb5d94bd46dc8b792a6ad0c5226d/container1/hello.zapp', 'device': 'image', 'mountpoint': '/', 'path_info': '/AUTH_0025cb5d94bd46dc8b792a6ad0c5226d/container1/hello.zapp', 'size': 20480}, {'lpath': '/opt/stack/data/1/sdb1/tmp/tmp7_ZxPN', 'content_type': 'text/html', 'access': 2, 'meta': {}, 'mode': None, 'removable': 'no', 'path': None, 'device': 'stdout', 'mountpoint': '/'}, {'lpath': '/usr/share/zerovm/python.tar', 'content_type': 'text/html', 'access': 5, 'meta': {}, 'mode': None, 'removable': 'no', 'path': None, 'device': 'python2.7', 'mountpoint': '/'}]
 
-            with tmpdir.mkstemp() as (zerovm_inputmnfst_fd,
+		channel values has been augmented here with lpath, ETag and other meta detas.
+
+	    '''
+	    
+	    with tmpdir.mkstemp() as (zerovm_inputmnfst_fd,
                                       zerovm_inputmnfst_fn):
+		my_debug("zerovm_inputmnfst_fd& zerovm_inputmnfst_fn",[zerovm_inputmnfst_fd, zerovm_inputmnfst_fn]) 
                 (output_fd, nvram_file) = mkstemp()
                 os.close(output_fd)
                 start = time.time()
@@ -1034,6 +1034,8 @@ class ObjectQueryMiddleware(object):
                                      'socket %s' % daemon_sock,
                                 headers=nexe_headers)
                 else:
+		    my_debug("non-demon zerovm", "ZeroVM non Demon")
+		    my_debug("some variable from locals()", [nvram_file, zerovm_nexe, local_object.channel])
                     zerovm_inputmnfst = \
                         self.parser.prepare_for_standalone(
                             config, nvram_file,
@@ -1041,6 +1043,33 @@ class ObjectQueryMiddleware(object):
                     self._debug_before_exec(config, debug_dir,
                                             nexe_headers, nvram_file,
                                             zerovm_inputmnfst)
+		    my_debug("some local variables [debug_dir, nexe_headers, zerovm_inputmnfst,nvram_file,zerovm_inputmnfst_fn ]",\
+		    [debug_dir, nexe_headers, zerovm_inputmnfst,nvram_file,zerovm_inputmnfst_fn ])
+
+		    '''
+			zerovm_inputmnfst has following content :
+
+			Version=20130611\n
+			Program=/opt/stack/data/1/sdb1/tmp/tmpu_xRNH/boot\n
+			Timeout=5\n
+			Memory=4294967296,0\n
+
+			Channel=/opt/stack/data/1/sdb1/objects/6/89e/0349731b12176cbf2d4c14054acdd89e/1407706277.40014.data,/dev/image,3,0,1073741824,1073741824,1073741824,1073741824\n
+			Channel=/opt/stack/data/1/sdb1/tmp/tmpR0kPec,/dev/stdout,0,1,0,0,1073741824,1073741824\n
+			Channel=/usr/share/zerovm/python.tar,/dev/python2.7,3,0,1073741824,1073741824,0,0\n
+			Channel=/dev/null,/dev/stdin,0,0,1073741824,1073741824,0,0\n
+			Channel=/dev/null,/dev/stderr,0,0,0,0,1073741824,1073741824\n
+			Channel=/opt/stack/data/1/sdb1/tmp/tmpu_xRNH/boot,/dev/self,3,0,1073741824,1073741824,0,0\n
+			Channel=/tmp/tmpl3RIcU,/dev/nvram,3,0,1073741824,1073741824,0,0\n
+
+			Node=1\n'
+
+
+
+
+
+		    '''
+		    
                     thrd = self._create_zerovm_thread(zerovm_inputmnfst,
                                                       zerovm_inputmnfst_fd,
                                                       zerovm_inputmnfst_fn,
@@ -1055,9 +1084,16 @@ class ObjectQueryMiddleware(object):
                                                   content_type='text/plain',
                                                   headers=nexe_headers)
                 (zerovm_retcode, zerovm_stdout, zerovm_stderr) = thrd.wait()
+
+		#output from zerovm execution...
+		my_debug("[zerovm_retcode, zerovm_stdout, zerovm_stderr]", [zerovm_retcode, zerovm_stdout, zerovm_stderr])
+
+
+
                 perf = "%.3f" % (time.time() - start)
                 if self.zerovm_perf:
                     self.logger.info("PERF SPAWN: %s" % perf)
+		# what does the debug do after zerovm execution?
                 self._debug_after_exec(debug_dir,
                                        nexe_headers,
                                        zerovm_retcode,
@@ -1072,6 +1108,9 @@ class ObjectQueryMiddleware(object):
                     self.logger.warning('zerovm stderr: '+zerovm_stderr)
                     zerovm_stdout += zerovm_stderr
                 report = zerovm_stdout.split('\n', REPORT_LENGTH - 1)
+
+		my_debug("report", report)
+
                 if len(report) == REPORT_LENGTH:
                     try:
                         if daemon_status != 1:
