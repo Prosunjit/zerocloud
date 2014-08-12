@@ -1098,6 +1098,11 @@ class ObjectQueryMiddleware(object):
                         self.parser.prepare_for_standalone(
                             config, nvram_file,
                             zerovm_nexe, local_object.channel)
+
+		    '''
+			prepare_for_standalone() is the sweetspot for me. The definition is given in configparser.py.
+			In order to create dynamic manifest file, required changes may be made here...
+		    '''
                     self._debug_before_exec(config, debug_dir,
                                             nexe_headers, nvram_file,
                                             zerovm_inputmnfst)
