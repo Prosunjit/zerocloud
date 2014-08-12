@@ -476,6 +476,13 @@ class ObjectQueryMiddleware(object):
                 return get_final_status(stdout_data, stderr_data, 3)
 
     def _extract_boot_file(self, channels, boot_file, image, zerovm_tmp):
+	'''	
+		given boot_file is the nexe location. This method read the nexe file & write it to a tmp location
+		and assign channel['boot'] to the tmp location.
+
+		after this method call, channel['boot'] contains path for the nexe file.
+	'''
+
     	my_debug("#boot_file", boot_file)
 	my_debug("#locals() in _extract_boof_file()", locals())
 	''' ------locals() has following values -------
@@ -735,7 +742,7 @@ class ObjectQueryMiddleware(object):
         with tmpdir.mkdtemp() as zerovm_tmp:
 	    my_debug("#req.body_file",req.body_file.__dict__)
 	    my_debug("#req.body_file.wfile",dir(req.body_file.wfile))
-	    # what is inside req.body_file ? need to figure it out....
+	    # what is inside req.body_file ? need to figure it out.... Assume hello.zap in this  case.
 
 	    #what is the read_iterator? why it use them ?
             read_iter = iter(lambda:
@@ -746,7 +753,12 @@ class ObjectQueryMiddleware(object):
             perf = "%.3f" % (time.time() - start)
 
 	    my_debug("read_iter", read_iter)
+	    '''
+		content of file read_iter is read by chunk and simultaneously writen to a temp file.
+		This is incremental read & write which is a clever trick to avoid chocking due to large file. 
+	    '''
             for chunk in read_iter:
+		my_debug("#chunk",chunk)
                 perf = "%s %.3f" % (perf, time.time() - start)
                 if req.body_file.position > rbytes:
                     return HTTPRequestEntityTooLarge(
@@ -799,6 +811,15 @@ class ObjectQueryMiddleware(object):
 
 			my_debug("fp",fp)
                     info = untar_stream.get_next_tarinfo()
+	    
+	    '''
+		reading & writing sysmap is complete here.
+	    '''
+
+	    '''
+		comment_id: 813,  reading the sysmap / config file here. This config is used to configure zerovm cluster to work with.
+	    '''
+
             if 'content-length' in req.headers \
                     and int(req.content_length) != req.body_file.position:
                 self.logger.warning('Client disconnect %s != %d : %s'
@@ -824,6 +845,10 @@ class ObjectQueryMiddleware(object):
             else:
                 return HTTPBadRequest(request=req,
                                       body='No system map found in request')
+	    '''
+	    	comment_id:813, reading sysmap is complete here.
+		variable config now holds cluster configuration.
+	    '''
 
             nexe_headers['x-nexe-system'] = config.get('name', '')
             # print json.dumps(config, indent=2)
@@ -868,13 +893,22 @@ class ObjectQueryMiddleware(object):
 
 	    '''
 
+	    '''
+		each channel in the config/sysmap is being read & are linked with local file.
+		for example, if stdin points to a swift file, the swift file is path is resolved to local file path.
+
+	    '''
+
             for ch in config['channels']:
                 chan_path = parse_location(ch['path'])
 		
-                if ch['device'] in channels:
+                if ch['device'] in channels: # ch['device'] = image for channels[0]
+		    #for image device, following line is called.
                     ch['lpath'] = channels[ch['device']]
                 elif local_object.has_local_file and chan_path:
+		    # for non-image device (ex. stdin, stdout, input etc).
                     if chan_path.url == local_object.swift_path.url:
+			# in the channel is pointing to a object in swift.
                         if chan_path.obj:
                             if access_type == 'GET':
                                 meta = local_object.disk_file.get_metadata()
@@ -914,7 +948,8 @@ class ObjectQueryMiddleware(object):
                         local_object.channel = ch
                 if self.parser.is_sysimage_device(ch['device']):
                     ch['lpath'] = self.parser.get_sysimage(ch['device'])
-                elif ch['access'] & (ACCESS_READABLE | ACCESS_CDR):
+                elif ch['access'] & (ACCESS_READABLE | ACCESS_CDR): 
+		    # if the channel is read only, check whether it exists. 
                     if not ch.get('lpath'):
                         if not chan_path or is_image_path(chan_path)\
                                 or is_swift_path(chan_path):
@@ -922,7 +957,10 @@ class ObjectQueryMiddleware(object):
                                                   body='Could not resolve '
                                                        'channel path: %s'
                                                        % ch['path'])
-                elif ch['access'] & ACCESS_WRITABLE:
+                elif ch['access'] & ACCESS_WRITABLE: 
+		    ''' if the channel is write only, create file descriptor and  ch['lpath'] contains file descriptor 
+		        which is used later. 
+		    '''
                     writable_tmpdir = self.get_writable_tmpdir(device)
                     (output_fd, output_fn) = mkstemp(dir=writable_tmpdir)
                     os.close(output_fd)
@@ -946,12 +984,16 @@ class ObjectQueryMiddleware(object):
 	    
 	    with tmpdir.mkstemp() as (zerovm_inputmnfst_fd,
                                       zerovm_inputmnfst_fn):
+	        '''
+			sample value:
+			(zerovm_inputmnfst_fd& zerovm_inputmnfst_fn ) = ( 10, '/opt/stack/data/1/sdb1/tmp/tmps0ECFE')
+		'''
 		my_debug("zerovm_inputmnfst_fd& zerovm_inputmnfst_fn",[zerovm_inputmnfst_fd, zerovm_inputmnfst_fn]) 
                 (output_fd, nvram_file) = mkstemp()
                 os.close(output_fd)
                 start = time.time()
                 daemon_status = None
-                if daemon_sock:
+                if daemon_sock: # this is not executed in zerovm is not running as daemon.
                     zerovm_inputmnfst = \
                         self.parser.prepare_for_forked(config, nvram_file,
                                                        local_object.channel)
@@ -1049,7 +1091,7 @@ class ObjectQueryMiddleware(object):
                                      'even after daemon restart: '
                                      'socket %s' % daemon_sock,
                                 headers=nexe_headers)
-                else:
+                else: # executed as non-daemon zerovm mode.
 		    my_debug("non-demon zerovm", "ZeroVM non Demon")
 		    my_debug("some variable from locals()", [nvram_file, zerovm_nexe, local_object.channel])
                     zerovm_inputmnfst = \

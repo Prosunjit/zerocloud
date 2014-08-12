@@ -45,9 +45,11 @@ def my_debug(beacon, arg):
 	write_and_print( "Start:------------------{}----------------------".format(beacon))
 	try:
 		if type(arg) == dict: 			
-        		d_arg = sanity_process(arg)
+        		''' json not working here. so commenting out
+			d_arg = sanity_process(arg)
                		x = json.dumps(d_arg, sort_keys=True, indent=4, separators=(',', ': ')) # pass dict in json.dumps
-			write_and_print(x)
+			'''
+			write_and_print(arg)
 		else:
 			write_and_print (arg)
         except Exception as e:
