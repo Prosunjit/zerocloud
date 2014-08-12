@@ -619,7 +619,7 @@ class ObjectQueryMiddleware(object):
             'x-nexe-system': ''
         }
 
-	#MyDebug("#req in zerovm_query", req).inspect()
+	MyDebug("#req in zerovm_query", req).inspect()
 
         try:
 	    # find account, container, object name
@@ -631,15 +631,22 @@ class ObjectQueryMiddleware(object):
         except ValueError, err:
             return HTTPBadRequest(body=str(err), request=req,
                                   content_type='text/plain')
+
+	'''	
+		local_object keeps track of the image file (ex. hello.zapp). it contains local_disk_file location (of hello.zap) and others. 
+	'''
         local_object = LocalObject(account, container, obj)
 	'''
-	#name of the local_object
+	#name :local_object
 	ex:
 		{'account': 'AUTH_0548686192274465bcdc4acec67f4396', 'obj': 'hello.zapp', 'disk_file': None, 'has_local_file': True, 'swift_path': <zerocloud.common.SwiftPath instance at 0x23b23f8>, 'path': None, 'container': 'container1', 'channel': None}
 
 	'''
 	my_debug("#local object", local_object.__dict__)
         rbytes = self.parser_config['limits']['rbytes']
+
+	# need to understand these checks.... ?
+
         if 'content-length' in req.headers \
                 and int(req.headers['content-length']) > rbytes:
             return HTTPRequestEntityTooLarge(body='RPC request too large',
@@ -657,7 +664,7 @@ class ObjectQueryMiddleware(object):
                                   content_type='text/plain',
                                   headers=nexe_headers)
         my_debug("#req.headers",req.headers)
-	access_type = req.headers.get('x-zerovm-access', '') # X-Zerovm-Access': 'GET'
+	access_type = req.headers.get('x-zerovm-access', '') # here X-Zerovm-Access': 'GET'
         if obj:
             try:
                 local_object.disk_file = \
@@ -667,11 +674,13 @@ class ObjectQueryMiddleware(object):
                                        container,
                                        obj)
 		my_debug("#local_object.disk_file", local_object.disk_file.__dict__)	
+		# local_object now contains location of the file in local filesystem. 
             except DiskFileDeviceUnavailable:
                 return HTTPInsufficientStorage(drive=device,
                                                request=req)
             if access_type == 'GET':
                 try:
+		    # the file is being opened to check if the file really exists.
                     local_object.disk_file.open()
                 except DiskFileNotExist:
                     return HTTPNotFound(request=req)
@@ -705,9 +714,7 @@ class ObjectQueryMiddleware(object):
                                   request=req, content_type='text/plain',
                                   headers=nexe_headers)
         if not thrdpool.can_spawn(job_id):
-            # if can_spawn() returned True it actually means
-            # that spawn() will always succeed
-            # unless something really bad happened
+            # if can_spawn() returned True it actually means  that spawn() will succeed unless something really bad happens.
             return HTTPServiceUnavailable(body='Slot not available',
                                           request=req,
                                           content_type='text/plain',
@@ -728,6 +735,8 @@ class ObjectQueryMiddleware(object):
         with tmpdir.mkdtemp() as zerovm_tmp:
 	    my_debug("#req.body_file",req.body_file.__dict__)
 	    my_debug("#req.body_file.wfile",dir(req.body_file.wfile))
+	    # what is inside req.body_file ? need to figure it out....
+
 	    #what is the read_iterator? why it use them ?
             read_iter = iter(lambda:
                              req.body_file.read(self.network_chunk_size),
@@ -750,10 +759,11 @@ class ObjectQueryMiddleware(object):
                                               headers=nexe_headers)
                 untar_stream.update_buffer(chunk)
                 info = untar_stream.get_next_tarinfo()
-		my_debug("#untar_stream info",info.__dict__)
+		my_debug("#untar_stream (info) info.__dict__",info.__dict__)
                 while info:
                     if info.offset_data:
                         fname = info.name
+			#info.name is 'sysmap' here.
                         file_iter = untar_stream.untar_file_iter()
                         if fname == 'image.gz':
                             fname = 'image'
@@ -766,7 +776,8 @@ class ObjectQueryMiddleware(object):
 			my_debug("fname of channels[fname]", channels[fname])
 
 			'''
-				channels[fame] : /opt/stack/data/1/sdb1/tmp/tmpqVKBkp/sysmap
+				channels[fname] is the location where the system map aka cluster configuration is temporarily stored.
+				channels[fname] : /opt/stack/data/1/sdb1/tmp/tmpqVKBkp/sysmap
 			'''
 
                         fp = open(channels[fname], 'ab')
@@ -1306,6 +1317,9 @@ class ObjectQueryMiddleware(object):
         else:
             try:
                 if 'x-zerovm-execute' in req.headers and req.method == 'POST':
+		    # zerovm_query() performs most of the work for zerovm execution related stuffs.
+		    # req method as way too many information. As we are now inside object server, it means now all files are to be accessed in local filesystem abstraction.
+		    # result from zerovm_query() method is processed for sending it back to the proxy-server.
                     res = self.zerovm_query(req)
                 elif req.method in ['PUT', 'POST'] \
                         and ('x-zerovm-validate' in req.headers
@@ -1328,6 +1342,7 @@ class ObjectQueryMiddleware(object):
                                               exc_info)
                     return self.app(env, validate_resp)
                 elif 'x-zerovm-valid' in req.headers and req.method == 'GET':
+		    #need to know more about GET method.... ?
                     self.logger.info('%s Started validity check due to: '
                                      'x-zerovm-valid: %s'
                                      % (req.url,
@@ -1368,6 +1383,7 @@ class ObjectQueryMiddleware(object):
             self.logger.info(log_line)
 
         return res(env, start_response)
+	# return result back to the proxy-server.
 
     def validate(self, req):
         try:
