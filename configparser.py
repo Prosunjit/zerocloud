@@ -562,6 +562,10 @@ class ClusterConfigParser(object):
 
         :returns zerovm manifest data as string
         """
+
+	'''
+		preparing manifest file, nvram file for zerovm execution....
+	'''
         zerovm_inputmnfst = (
             'Version=%s\n'
             'Program=%s\n'
@@ -598,6 +602,9 @@ class ClusterConfigParser(object):
                 else:
                     continue
             access = ch['access']
+	    '''	
+		adding image and other devices in the manitest as channels.
+	    '''
             if self.is_sysimage_device(device):
                 fstab = add_to_fstab(fstab, device, 'ro')
             if access & ACCESS_READABLE:
@@ -636,12 +643,20 @@ class ClusterConfigParser(object):
             if mode:
                 mode_mapping[device] = mode
             channels.append(device)
+
+	'''
+		adding network devices in the manifest. 
+	'''
         network_devices = []
         for conn in config['connect'] + config['bind']:
             zerovm_inputmnfst += 'Channel=%s\n' % conn
             dev = conn.split(',', 2)[1][5:]  # len('/dev/') = 5
             if dev in STD_DEVICES:
                 network_devices.append(dev)
+
+	'''
+		adding stdin, stdout, stderr devices in the manifest.
+	'''
         for dev in STD_DEVICES:
             if dev not in channels and dev not in network_devices:
                 if 'stdin' in dev:
@@ -659,6 +674,11 @@ class ClusterConfigParser(object):
                 'Channel=%s,/dev/self,3,0,%s,%s,0,0\n' % \
                 (zerovm_nexe, self.parser_config['limits']['reads'],
                  self.parser_config['limits']['rbytes'])
+
+	'''
+		preparing nvram file. nvram file has option for arg, maping, fstab, and env. 
+		these option are being populated here.
+	'''
         env = None
         if config.get('env'):
             env = '[env]\n'
@@ -703,6 +723,7 @@ class ClusterConfigParser(object):
             for k, v in config['env'].iteritems():
                 if v:
                     env += ENV_ITEM % (k, quote_for_env(v))
+
         args = '[args]\nargs = %s' % config['name']
         if config.get('args'):
             args += ' %s' % config['args']
@@ -717,6 +738,9 @@ class ClusterConfigParser(object):
         for chunk in [fstab, args, env, mapping]:
             fd.write(chunk or '')
         fd.close()
+	'''
+		finally, adding nvram file with the zerovm manifest file.
+	'''
         zerovm_inputmnfst += \
             'Channel=%s,/dev/nvram,3,0,%s,%s,%s,%s\n' % \
             (nvram_file,
